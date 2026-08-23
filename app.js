@@ -37,48 +37,46 @@ const ADMIN_SLACK_USER_ID = process.env.ADMIN_SLACK_USER_ID;
 const botClient = new WebClient(process.env.SLACK_BOT_TOKEN);
 let BOT_USER_ID = null;
 
-const OAUTH_FAILURE_ESCALATION_THRESHOLD = 3;
-let oauthFailureStreak = 0;
+function errorDetail(err) {
+  return (err && err.data && err.data.error) || (err && err.message) || String(err);
+}
 
-async function reportOauthFailure(slackUserId, errorMsg) {
-  oauthFailureStreak += 1;
+async function notifyAdmin(label, slackUserId, detail) {
+  if (!ADMIN_SLACK_USER_ID) return;
+  try {
+    await botClient.chat.postMessage({
+      channel: ADMIN_SLACK_USER_ID,
+      text: `:rotating_light: ${label}${slackUserId ? ` (from <@${slackUserId}>)` : ''}: ${detail}`,
+    });
+  } catch (e) {
+  }
+}
+
+// error handeling, should report to both user and me?
+async function reportError(slackUserId, label, err) {
+  const detail = errorDetail(err);
+  const adminMention = ADMIN_SLACK_USER_ID ? `<@${ADMIN_SLACK_USER_ID}>` : 'the bot admin';
 
   if (slackUserId) {
     try {
       await botClient.chat.postMessage({
         channel: slackUserId,
-        text:
-          `:warning: Something went wrong connecting your Slack account: ${errorMsg}\n` +
-          'Try again with /link-bdaypheus. If it keeps failing, this has already been flagged for review.',
+        text: `:warning: ${label}: ${detail}\nIf this keeps happening, contact ${adminMention}.`,
       });
     } catch (e) {
     }
   }
 
-  if (ADMIN_SLACK_USER_ID && oauthFailureStreak >= OAUTH_FAILURE_ESCALATION_THRESHOLD) {
-    try {
-      await botClient.chat.postMessage({
-        channel: ADMIN_SLACK_USER_ID,
-        text:
-          `:rotating_light: The Hack Club Auth / Slack OAuth connect flow has failed ` +
-          `${oauthFailureStreak} times in a row. Latest error: ${errorMsg}` +
-          (slackUserId ? ` (most recent requester: <@${slackUserId}>)` : ''),
-      });
-    } catch (e) {
-      // best-effort
-    }
-  }
-}
+  await notifyAdmin(label, slackUserId, detail);
 
-function reportOauthSuccess() {
-  oauthFailureStreak = 0;
+  return detail;
 }
 
 const README_URL = 'https://github.com/CKacha/bday-bot#readme';
 
 const CONSENT_WARNING =
   ':exclamation: *Small fyi:* by going through auth the bot will be using your slack user token to only read the members of ' +
-  'private channels you are a part of. Read the full info at the warning file on the repo. ' +
+  'private channels you are a part of. Read the full info in <https://github.com/CKacha/bday-bot/blob/main/docs/warning.md|the warning file>. ' +
   'You can revoke the token at any time by running /unlink-bdaypheus ';
 
 // state -> { slackUserId, hackclubVerified, createdAt }
@@ -191,7 +189,7 @@ http
         const tokenData = await tokenResp.json();
         if (!tokenResp.ok || !tokenData.access_token) {
           sendHtml(res, 400, "Hack Club Auth didn't confirm your identity. Please try again.");
-          await reportOauthFailure(pending.slackUserId, "Hack Club Auth didn't confirm identity");
+          await reportError(pending.slackUserId, 'Hack Club Auth connect failed', new Error('did not confirm identity'));
           return;
         }
 
@@ -200,7 +198,7 @@ http
         res.end();
       } catch (err) {
         sendHtml(res, 500, 'Something went wrong verifying your Hack Club account.');
-        await reportOauthFailure(pending.slackUserId, `Hack Club token exchange threw: ${err.message}`);
+        await reportError(pending.slackUserId, 'Hack Club Auth token exchange threw', err);
       }
       return;
     }
@@ -231,16 +229,19 @@ http
         const userToken = result.authed_user && result.authed_user.access_token;
         if (!userId || !userToken) {
           sendHtml(res, 400, "Slack didn't return a user token. If this is a localhost version, amke sure the bot has user scopes enabled.");
-          await reportOauthFailure(pending && pending.slackUserId, "Slack didn't return a user token");
+          await reportError(
+            pending && pending.slackUserId,
+            'Slack connect failed',
+            new Error('Slack did not return a user token')
+          );
           return;
         }
         tokenStore.set(userId, userToken);
         if (state) pendingConnections.delete(state);
         sendHtml(res, 200, 'Connected! You can close this tab and go back to Slack.');
-        reportOauthSuccess();
       } catch (err) {
         sendHtml(res, 500, 'Something went wrong connecting your account.');
-        await reportOauthFailure(pending && pending.slackUserId, `Slack token exchange threw: ${err.message}`);
+        await reportError(pending && pending.slackUserId, 'Slack token exchange threw', err);
       }
       return;
     }
@@ -332,7 +333,7 @@ async function computeAutoRecipients(client, { sourceChannelId, birthdayUserId, 
       const groupMembers = await getUsergroupMembers(client, groupId);
       groupMembers.forEach((id) => allMembers.add(id));
     } catch (err) {
-      // skiping unreadable groups, send dm as fail state but probably wont happen?
+      await reportError(inviterId, `Couldn't read group <!subteam^${groupId}>, so it was skipped`, err);
     }
   }
 
@@ -416,6 +417,7 @@ function buildFormBlocks({
       type: 'input',
       block_id: 'dest_block',
       label: { type: 'plain_text', text: 'Planning channel (the one you manage)' },
+      dispatch_action: true,
       element: {
         type: 'conversations_select',
         action_id: 'dest_select',
@@ -467,14 +469,41 @@ function buildFormBlocks({
 // no tweeking okease
 const notifiedAccessFailures = new Set();
 
+async function checkDestChannelAccess(client, destChannelId) {
+  try {
+    await client.conversations.info({ channel: destChannelId });
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
 async function buildPreview(
   client,
-  { sourceChannelId, birthdayUserId, inviterId, groupIds, messageInput }
+  { sourceChannelId, birthdayUserId, inviterId, groupIds, messageInput, destChannelId }
 ) {
-  if (!sourceChannelId) return { blocks: [], autoRecipients: [] };
-
-  const blocks = [{ type: 'divider' }];
+  const blocks = [];
   let autoRecipients = [];
+
+  if (destChannelId) {
+    const canAccessDest = await checkDestChannelAccess(client, destChannelId);
+    if (!canAccessDest) {
+      blocks.push({ type: 'divider' });
+      blocks.push({
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text:
+            `:warning: I can't add people to that channel (the one you're inviting *into*) — make sure ` +
+            `${BOT_USER_ID ? `<@${BOT_USER_ID}>` : '@bdaypheus'} has been invited to it, then try again.`,
+        },
+      });
+    }
+  }
+
+  if (!sourceChannelId) return { blocks, autoRecipients };
+
+  blocks.push({ type: 'divider' });
 
   try {
     const { recipients, sourceChannelName } = await computeAutoRecipients(client, {
@@ -521,8 +550,8 @@ async function buildPreview(
         text: {
           type: 'mrkdwn',
           text:
-            ":lock: That's a private channel this bot is not in. I've sent you a DM with how to connect your " +
-            "Slack account. Once you connect, try again! "
+            ":lock: That's a private channel this bot is not in (the one you're inviting *from*). " +
+            "I've sent you a DM with how to connect your Slack account. Once you connect, try again! "
         },
       });
 
@@ -536,8 +565,9 @@ async function buildPreview(
               text: {
                 type: 'mrkdwn',
                 text:
-                  `:lock: <#${sourceChannelId}> is a private channel I'm not in. Connect your Slack account ` +
-                  "(you'll verify with Hack Club Auth first) with /link-bdaypheus, or the dm that I sent you.",
+                  `:lock: <#${sourceChannelId}> (the channel you're inviting *from*) is a private channel I'm ` +
+                  "not in. Connect your Slack account (you'll verify with Hack Club Auth first) with " +
+                  "/link-bdaypheus, or the dm that I sent you.",
               },
             },
             {
@@ -569,14 +599,11 @@ async function buildPreview(
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `:warning: Couldn't load a preview for that channel (${err.data ? err.data.error : err.message}). Make sure ${BOT_USER_ID ? `<@${BOT_USER_ID}>` : '@bdaypheus'} has been invited to it.`,
+          text: `:warning: Couldn't load a preview for that channel, the one you're inviting *from* (${err.data ? err.data.error : err.message}). Make sure ${BOT_USER_ID ? `<@${BOT_USER_ID}>` : '@bdaypheus'} has been invited to it.`,
         },
       });
       if (!alreadyNotified) {
-        await client.chat.postMessage({
-          channel: inviterId,
-          text: `:warning: I couldn't read <#${sourceChannelId}>: ${err.data ? err.data.error : err.message}\nSetup docs: ${README_URL}`,
-        });
+        await reportError(inviterId, `Couldn't read <#${sourceChannelId}>`, err);
       }
       blocks.push({
         type: 'actions',
@@ -618,7 +645,7 @@ async function refreshModal(body, client) {
 
   const [usergroupOptions, preview] = await Promise.all([
     getUsergroupOptions(client),
-    buildPreview(client, { sourceChannelId, birthdayUserId, inviterId, groupIds, messageInput }),
+    buildPreview(client, { sourceChannelId, birthdayUserId, inviterId, groupIds, messageInput, destChannelId }),
   ]);
 
   await client.views.update({
@@ -775,6 +802,11 @@ app.action('source_select', async ({ ack, body, client }) => {
   await refreshModal(body, client);
 });
 
+app.action('dest_select', async ({ ack, body, client }) => {
+  await ack();
+  await refreshModal(body, client);
+});
+
 app.action('bday_select', async ({ ack, body, client }) => {
   await ack();
   await refreshModal(body, client);
@@ -857,10 +889,7 @@ app.view('bday_confirm', async ({ ack, view, client, body }) => {
             `${CONSENT_WARNING}\n\nSetup docs: ${README_URL}`,
         });
       } else {
-        await client.chat.postMessage({
-          channel: inviterId,
-          text: `I couldn't read <#${sourceChannelId}>: ${err.data ? err.data.error : err.message}\nSetup docs: ${README_URL}`,
-        });
+        await reportError(inviterId, `Couldn't read <#${sourceChannelId}>`, err);
       }
       return;
     }
@@ -928,6 +957,11 @@ app.view('bday_confirm', async ({ ack, view, client, body }) => {
   
   if (failures.length) {
     summaryLines.push(`Couldn't DM: ${failures.map((id) => `<@${id}>`).join(', ')}`);
+    await notifyAdmin(
+      `${failures.length} of ${toMessage.length} birthday invite DMs failed to send`,
+      inviterId,
+      `for <@${birthdayUserId}>'s birthday — failed: ${failures.map((id) => `<@${id}>`).join(', ')}`
+    );
   }
 
   await client.chat.postMessage({
@@ -959,6 +993,7 @@ app.action('bday_accept', async ({ ack, body, client, action }) => {
           },
         ],
       });
+      await notifyAdmin("Couldn't add someone to a planning channel", body.user.id, code);
       return;
     }
   }
