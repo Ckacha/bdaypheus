@@ -13,9 +13,8 @@ const app = new App({
   logLevel: LogLevel.DEBUG,
 });
 
-// part to self generate user token for private channels 
 const OAUTH_PORT = process.env.PORT || 3000;
-const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL; // get a subdomain for ckacha and hook this up
+const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL; 
 const SLACK_OAUTH_REDIRECT_URI = PUBLIC_BASE_URL ? `${PUBLIC_BASE_URL}/slack/oauth/callback` : null;
 const HACKCLUB_OAUTH_REDIRECT_URI = PUBLIC_BASE_URL ? `${PUBLIC_BASE_URL}/oauth/callback` : null;
 
@@ -33,7 +32,7 @@ const CHAIN_ENABLED = Boolean(
 
 const ADMIN_SLACK_USER_ID = process.env.ADMIN_SLACK_USER_ID;
 
-// http routuing please work
+// long story short it worked
 const botClient = new WebClient(process.env.SLACK_BOT_TOKEN);
 let BOT_USER_ID = null;
 
@@ -48,11 +47,13 @@ async function notifyAdmin(label, slackUserId, detail) {
       channel: ADMIN_SLACK_USER_ID,
       text: `:rotating_light: ${label}${slackUserId ? ` (from <@${slackUserId}>)` : ''}: ${detail}`,
     });
+
   } catch (e) {
+   //idk if i should add more error handeling above this, should be fine?
   }
 }
 
-// error handeling, should report to both user and me?
+// error handeling | works
 async function reportError(slackUserId, label, err) {
   const detail = errorDetail(err);
   const adminMention = ADMIN_SLACK_USER_ID ? `<@${ADMIN_SLACK_USER_ID}>` : 'the bot admin';
@@ -79,7 +80,6 @@ const CONSENT_WARNING =
   'private channels you are a part of. Read the full info in <https://github.com/CKacha/bday-bot/blob/main/docs/warning.md|the warning file>. ' +
   'You can revoke the token at any time by running /unlink-bdaypheus ';
 
-// state -> { slackUserId, hackclubVerified, createdAt }
 const pendingConnections = new Map();
 
 function buildConnectUrl(inviterId) {
@@ -116,8 +116,6 @@ function getPendingConnection(state) {
 }
 
 function getUserClient(userId) {
-  // SLACK_USER_TOKEN rn is only for testing
-  // get rid of this part in roduction since token storing is gonna be differnet
   const token = tokenStore.get(userId) || process.env.SLACK_USER_TOKEN;
   return token ? new WebClient(token) : null;
 }
@@ -130,6 +128,7 @@ async function fetchChannelContext(botClient, inviterId, channelId) {
     const members = await getChannelMembers(reader, channelId);
     return { info, members };
   } catch (err) {
+    
     const code = err.data ? err.data.error : err.message;
     const missingAccess = ['channel_not_found', 'not_in_channel', 'missing_scope'].includes(code);
     if (!userClient && CHAIN_ENABLED && missingAccess) {
@@ -137,7 +136,9 @@ async function fetchChannelContext(botClient, inviterId, channelId) {
       needsConnectErr.needsConnect = true;
       throw needsConnectErr;
     }
+
     throw err;
+
   }
 }
 
@@ -494,7 +495,7 @@ async function buildPreview(
         text: {
           type: 'mrkdwn',
           text:
-            `:warning: I can't add people to that channel (the one you're inviting *into*) — make sure ` +
+            `:warning: I can't add people to that channel (the one you're inviting *into*)! Make sure ` +
             `${BOT_USER_ID ? `<@${BOT_USER_ID}>` : '@bdaypheus'} has been invited to it, then try again.`,
         },
       });
@@ -533,7 +534,7 @@ async function buildPreview(
       elements: [
         {
           type: 'mrkdwn',
-          text: `Auto-filled ${recipients.length} ${recipients.length === 1 ? 'person' : 'people'} from #${sourceChannelName}${groupNote} into the list below — edit it to add or remove anyone.`,
+          text: `Auto-filled ${recipients.length} ${recipients.length === 1 ? 'person' : 'people'} from #${sourceChannelName}${groupNote} into the list below. Edit it to add or remove anyone.`,
         },
       ],
     });
@@ -550,8 +551,8 @@ async function buildPreview(
         text: {
           type: 'mrkdwn',
           text:
-            ":lock: That's a private channel this bot is not in (the one you're inviting *from*). " +
-            "I've sent you a DM with how to connect your Slack account. Once you connect, try again! "
+            `:lock: That's a private channel this bot is not in (the one you're inviting *from*). ` +
+            `I've sent you a DM with how to connect your Slack account. Once you connect, try again! `
         },
       });
 
@@ -871,9 +872,7 @@ app.view('bday_confirm', async ({ ack, view, client, body }) => {
 
   await ack();
 
-  // The "People to invite" field is the actual send-list once populated —
-  // only fall back to computing it fresh if it somehow ended up empty
-  // (e.g. connect flow was interrupted before it ever got auto-filled).
+  // invite list 
   let toMessage = recipientIds;
   if (!toMessage.length) {
     try {
@@ -898,7 +897,7 @@ app.view('bday_confirm', async ({ ack, view, client, body }) => {
   if (!toMessage.length) {
     await client.chat.postMessage({
       channel: inviterId,
-      text: "There's nobody in the invite list — add someone in the \"People to invite\" field and try again.",
+      text: "There's nobody in the invite list! Add someone in the \"People to invite\" field and try again.",
     });
     return;
   }
@@ -960,7 +959,7 @@ app.view('bday_confirm', async ({ ack, view, client, body }) => {
     await notifyAdmin(
       `${failures.length} of ${toMessage.length} birthday invite DMs failed to send`,
       inviterId,
-      `for <@${birthdayUserId}>'s birthday — failed: ${failures.map((id) => `<@${id}>`).join(', ')}`
+      `for <@${birthdayUserId}>'s birthday. Failed: ${failures.map((id) => `<@${id}>`).join(', ')}`
     );
   }
 
