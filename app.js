@@ -870,6 +870,19 @@ app.view('bday_confirm', async ({ ack, view, client, body }) => {
     return;
   }
 
+  try {
+    await botClient.conversations.info({ channel: destChannelId });
+  } catch (err) {
+    const code = err.data ? err.data.error : err.message;
+    await ack({
+      response_action: 'errors',
+      errors: {
+        dest_block: `I'm not in that channel yet (${code}). Invite me to it first, then try again.`,
+      },
+    });
+    return;
+  }
+
   await ack();
 
   // invite list 
