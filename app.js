@@ -238,6 +238,7 @@ http
           return;
         }
         tokenStore.set(userId, userToken);
+        await notifyAdmin('Personal Slack token added', userId, 'user linked their account via /link-bdaypheus');
         if (state) pendingConnections.delete(state);
         sendHtml(res, 200, 'Connected! You can close this tab and go back to Slack.');
       } catch (err) {
@@ -787,6 +788,7 @@ app.command('/unlink-bdaypheus', async ({ command, ack, respond }) => {
   }
 
   tokenStore.remove(command.user_id);
+  await notifyAdmin('Personal Slack token removed', command.user_id, 'user ran /unlink-bdaypheus');
 
   await respond({
     response_type: 'ephemeral',
