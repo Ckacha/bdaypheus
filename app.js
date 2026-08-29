@@ -358,7 +358,10 @@ function buildFormBlocks({
   recipientIds = [],
   autoRecipients = [],
 }) {
-  const effectiveRecipients = recipientIds.length ? recipientIds : autoRecipients;
+  // The birthday person is never a valid recipient — strip them from whatever list we show.
+  const effectiveRecipients = (recipientIds.length ? recipientIds : autoRecipients).filter(
+    (id) => id !== birthdayUserId
+  );
 
   return [
     {
@@ -887,9 +890,9 @@ app.view('bday_confirm', async ({ ack, view, client, body }) => {
 
   await ack();
 
-  // invite list 
-  let toMessage = recipientIds;
-  if (!toMessage.length) {
+  // invite list — always strip the birthday person, even if someone manually added them
+  let toMessage = recipientIds.filter((id) => id !== birthdayUserId);
+  if (!recipientIds.length) {
     try {
       const ctx = await computeAutoRecipients(client, { sourceChannelId, birthdayUserId, inviterId, groupIds });
       toMessage = ctx.recipients;
@@ -987,6 +990,26 @@ app.view('bday_confirm', async ({ ack, view, client, body }) => {
 app.action('bday_accept', async ({ ack, body, client, action }) => {
   await ack();
   const { dest, bday, inviter } = JSON.parse(action.value);
+
+  // Hard stop: the birthday person must never be added to the planning channel,
+  // no matter how they got this button (stale DM, forwarded message, etc.).
+  if (body.user.id === bday) {
+    await client.chat.update({
+      channel: body.channel.id,
+      ts: body.message.ts,
+      text: "This is your birthday celebration — I can't add you to the planning channel!",
+      blocks: [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: ":sparkles: This one's *your* birthday celebration, so I can't add you to the planning channel. Enjoy the surprise!",
+          },
+        },
+      ],
+    });
+    return;
+  }
 
   try {
     await client.conversations.invite({ channel: dest, users: body.user.id });
