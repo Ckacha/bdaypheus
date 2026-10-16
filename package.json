@@ -5,7 +5,8 @@
   "description": "Slack bot to invite people to birthday card/planning channels",
   "main": "app.js",
   "scripts": {
-    "start": "node app.js"
+    "start": "node app.js",
+    "dev": "node --watch app.js"
   },
   "dependencies": {
     "@slack/bolt": "^3.21.4",

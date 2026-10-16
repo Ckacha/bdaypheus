@@ -19,6 +19,9 @@ If it is down, dm [@iamalive](https://hackclub.slack.com/team/U0828FYS2UC) on sl
 /unlink-bdaypheus
     Used to unlink your slack account and get rid of your personal token(check [warning.md](docs/warning.md) fur full explanation)
 
+/send-reminders [@birthday person]
+    Re-sends the invite to everyone who hasn't accepted or declined yet. (only the original inviter can do this)
+
 ## Private channels
 
 Becuase adding a bot literally named Bdaypheus would be pretty sus to a person's personal channel, and getting admins perms would be annoying, 

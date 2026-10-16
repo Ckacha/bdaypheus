@@ -27,6 +27,12 @@
         "description": "Unlink your connected Slack account",
         "usage_hint": "",
         "should_escape": true
+      },
+      {
+        "command": "/send-reminders",
+        "description": "Remind people who haven't answered your birthday invite",
+        "usage_hint": "[@birthday person]",
+        "should_escape": true
       }
     ]
   },

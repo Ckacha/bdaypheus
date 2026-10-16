@@ -19,6 +19,7 @@ Also make sure to turn on **Socket Mode**, **Interactivity**, and **Shortcuts**.
 - `/bdaypheus`
 - `/link-bdaypheus` 
 - `/unlink-bdaypheus` 
+- `/send-reminders`
 
 ## .env setup
 
