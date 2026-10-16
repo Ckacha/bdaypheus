@@ -1208,6 +1208,19 @@ app.action('bday_decline', async ({ ack, body, client, action }) => {
   });
 });
 
+app.event('app_mention', async ({ event, client }) => {
+  try {
+    await client.chat.postEphemeral({
+      channel: event.channel,
+      user: event.user,
+      ...(event.thread_ts ? { thread_ts: event.thread_ts } : {}),
+      text: 'pstt use /bdaypheus or check out <https://bdaypheus.ckacha.dev|bdaypheus.ckacha.dev>!',
+    });
+  } catch (err) {
+    await notifyAdmin("Couldn't answer a ping", event.user, errorDetail(err));
+  }
+});
+
 (async () => {
   const auth = await botClient.auth.test();
   BOT_USER_ID = auth.user_id;

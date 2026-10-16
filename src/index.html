@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Bdaypheus Token Info</title>
+    <meta name="description" content="What connecting your Slack account to Bdaypheus does, and how to undo it.">
+    <link rel="stylesheet" href="style.css">
+  </head>
+
+  <body>
+    <main>
+      <header>
+        <p class="eyebrow">bdaypheus</p>
+        <h1>smol warning for ya</h1>
+        <p class="lede">
+          Connecting your Slack account to this bot creates a personal Slack access token tied to your account.
+          Here's exactly what that means.
+        </p>
+      </header>
+
+      <section class="cards">
+        <div class="card can">
+          <h2>What it can do</h2>
+          <ul>
+            <li>Read the name, topic, and full member list of every channel you are in.</li>
+          </ul>
+        </div>
+        <div class="card cant">
+          <h2>What it can't do</h2>
+          <ul>
+            <li>Everything not listed under "What it can do". No reading messages, no posting as you, nothing else.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section>
+        <h2>Why?</h2>
+        <p>
+          The bot can only see the member lists of public channels and ping groups. If you want to invite people
+          from a private channel (say, a private channel of your friends), the bot can't see who's in it.
+        </p>
+        <p>
+          To fix that, you can go through a Hack Club Auth + Slack auth flow that gives the bot your personal
+          Slack token, used <strong>only</strong> to read the members of private channels you're in. That's it!
+        </p>
+      </section>
+
+      <section>
+        <h2>How to revoke it</h2>
+        <ol>
+          <li>Run <code>/unlink-bdaypheus</code> in Slack. This revokes the token and deletes it from the bot.</li>
+          <li>Or remove it yourself: Slack → your apps → Bday Bot → Remove.</li>
+        </ol>
+        <p class="note">
+          After revoking, the next time the bot needs to read a private channel you're in, it'll just ask you to
+          connect again.
+        </p>
+      </section>
+
+      <footer>
+        <a href="https://github.com/CKacha/bday-bot#readme">Source &amp; setup docs on GitHub</a>
+      </footer>
+    </main>
+  </body>
+</html>

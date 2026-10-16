@@ -43,6 +43,7 @@
     "scopes": {
       "bot": [
         "commands",
+        "app_mentions:read",
         "chat:write",
         "im:write",
         "channels:read",
@@ -60,6 +61,11 @@
   },
 
   "settings": {
+    "event_subscriptions": {
+      "bot_events": [
+        "app_mention"
+      ]
+    },
     "interactivity": {
       "is_enabled": true
     },
