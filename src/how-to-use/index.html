@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>How To Use Bdaypheus</title>
+    <meta name="description" content="Every Bdaypheus command and how to use it.">
+    <link rel="icon" href="../avatar.jpg">
+    <link rel="stylesheet" href="../style.css">
+  </head>
+
+  <body>
+    <main class="wide">
+      <nav>
+        <a href="../">Home</a>
+        <a href="./" aria-current="page">How to use</a>
+        <a href="../why/">Why link?</a> 
+        <a href="../warning/">Warning</a>
+      </nav>
+
+      <header>
+        <h1>how to use it</h1>
+      </header>
+
+      <section class="commands">
+        <details class="card cmd">
+          <summary>
+            <code>/bdaypheus</code>
+            <span class="tagline">Start a birthday invite</span>
+          </summary>
+          <div class="cmd-body">
+            <p>
+              Opens the invite form. Pick the channel (and any ping groups) to invite people from, the birthday person,
+              their birthday, and a planning channel. Bdaypheus can create a new private channel for you, or you can pick
+              one you already made.
+            </p>
+            <ul>
+              <li>Edit the invite message and the list of people before sending.</li>
+              <li>Only one person can start invites for each birthday. If someone already did, Bdaypheus tells you who to DM.</li>
+              <li>Creating a channel needs your account linked first (see <code>/link-bdaypheus</code>).</li>
+            </ul>
+          </div>
+        </details>
+
+        <details class="card cmd">
+          <summary>
+            <code>/send-reminders</code>
+            <span class="tagline">Nudge people who haven't answered</span>
+          </summary>
+          <div class="cmd-body">
+            <p>
+              DMs everyone who hasn't answered yet a link to their invite. If you started more than one birthday,
+              you pick which one from a list.
+            </p>
+            <div class="subcmd">
+              <h3><code>/send-reminders @birthday person</code></h3>
+              <p>Skips the list and reminds people for that person's birthday.</p>
+            </div>
+          </div>
+        </details>
+
+        <details class="card cmd">
+          <summary>
+            <code>/link-bdaypheus</code>
+            <span class="tagline">Link your Slack account</span>
+          </summary>
+          <div class="cmd-body">
+            <p>
+              Links your Slack account so Bdaypheus can create planning channels as you and invite people from
+              private channels. You can also link from the <a href="../">home page</a>.
+            </p>
+            <p class="fine"><a href="../why/">Why it's needed</a> · <a href="../warning/">What the token can do</a></p>
+          </div>
+        </details>
+
+        <details class="card cmd">
+          <summary>
+            <code>/unlink-bdaypheus</code>
+            <span class="tagline">Revoke your token</span>
+          </summary>
+          <div class="cmd-body">
+            <p>
+              Revokes your token with Slack and deletes it from the bot. Same as "Revoke my token" on the
+              <a href="../">home page</a>.
+            </p>
+          </div>
+        </details>
+
+        <details class="card cmd">
+          <summary>
+            <code>@bdaypheus</code>
+            <span class="tagline">Ping the bot</span>
+          </summary>
+          <div class="cmd-body">
+            <p>Replies with a message only you can see, pointing you here.</p>
+          </div>
+        </details>
+      </section>
+
+      <section>
+        <h2>Still stuck?</h2>
+        <p>
+          Ask in <a href="https://hackclub.enterprise.slack.com/archives/C0BS244S0F4">#bdaypheus-dev</a> or ping
+          <a href="https://hackclub.slack.com/team/U0828FYS2UC">@iamalive</a> on Slack.
+        </p>
+      </section>
+
+      <footer>
+        <a href="https://github.com/CKacha/bday-bot">Source</a> · running
+        <a href="https://github.com/CKacha/bday-bot/commit/__COMMIT__"><code>__COMMIT_SHORT__</code></a>
+      </footer>
+    </main>
+  </body>
+</html>

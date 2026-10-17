@@ -1,10 +1,13 @@
 require('dotenv').config();
 const http = require('http');
+const fs = require('fs');
+const path = require('path');
 const crypto = require('crypto');
 const { App, LogLevel } = require('@slack/bolt');
 const { WebClient } = require('@slack/web-api');
 const tokenStore = require('./tokenStore');
 const birthdayStore = require('./birthdayStore');
+const webSession = require('./webSession');
 
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
@@ -74,9 +77,10 @@ async function reportError(slackUserId, label, err) {
 const README_URL = 'https://github.com/CKacha/bday-bot#readme';
 
 const CONSENT_WARNING =
-  ':exclamation: *Small fyi:* by going through auth the bot will be using your slack user token to only read the members of ' +
-  'private channels you are a part of, and to create private planning channels for you when you ask it to. ' +
-  'Read the full info in <https://github.com/CKacha/bday-bot/blob/main/docs/warning.md|the warning file>. ' +
+  ':exclamation: *Small fyi:* by going through auth the bot will use your slack user token to read the member list of ' +
+  'whichever channel you invite people from in /bdaypheus (public or private, as long as you are in it), and to create ' +
+  'private planning channels for you when you ask it to. ' +
+  'Read the full info on <https://bdaypheus.ckacha.dev/warning|the warning page>. ' +
   'You can revoke the token at any time by running /unlink-bdaypheus ';
 
 const pendingConnections = new Map();
@@ -141,9 +145,87 @@ async function fetchChannelContext(botClient, inviterId, channelId) {
   }
 }
 
-function sendHtml(res, status, body) {
-  res.writeHead(status, { 'Content-Type': 'text/html' });
-  res.end(`<html><body>${body}</body></html>`);
+const SITE_DIR = path.join(__dirname, 'src');
+const SITE_TYPES = {
+  '.html': 'text/html; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+};
+const PUBLIC_ORIGIN = PUBLIC_BASE_URL ? new URL(PUBLIC_BASE_URL).origin : null;
+
+function redirectTo(res, location, headers = {}) {
+  res.writeHead(302, { Location: location, ...headers });
+  res.end();
+}
+
+function sendJson(res, status, body, headers = {}) {
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...headers });
+  res.end(JSON.stringify(body));
+}
+
+function serveSite(pathname, res) {
+  let decoded;
+  try {
+    decoded = decodeURIComponent(pathname);
+  } catch (err) {
+    return false;
+  }
+  let file = path.normalize(path.join(SITE_DIR, decoded));
+  if (file !== SITE_DIR && !file.startsWith(SITE_DIR + path.sep)) return false;
+  if (pathname.endsWith('/')) file = path.join(file, 'index.html');
+  else if (fs.existsSync(path.join(file, 'index.html'))) {
+    redirectTo(res, `${pathname}/`);
+    return true;
+  }
+  if (!fs.existsSync(file) || !fs.statSync(file).isFile()) return false;
+  res.writeHead(200, { 'Content-Type': SITE_TYPES[path.extname(file)] || 'application/octet-stream' });
+  fs.createReadStream(file).pipe(res);
+  return true;
+}
+
+async function slackDisplayName(userId) {
+  try {
+    const { user } = await botClient.users.info({ user: userId });
+    return (user.profile && user.profile.display_name) || user.real_name || user.name || null;
+  } catch (err) {
+    return null;
+  }
+}
+
+async function unlinkUser(userId, via) {
+  let revokeFailure = null;
+  try {
+    await new WebClient(tokenStore.get(userId)).auth.revoke();
+  } catch (err) {
+    const code = errorDetail(err);
+    const alreadyDead = ['token_revoked', 'invalid_auth', 'account_inactive'].includes(code);
+    if (!alreadyDead) revokeFailure = code;
+  }
+
+  tokenStore.remove(userId);
+
+  if (revokeFailure) {
+    await notifyAdmin('Personal Slack token removed but revoke failed', userId, `${revokeFailure} (${via})`);
+  } else {
+    await notifyAdmin('Personal Slack token removed', userId, via);
+  }
+  return { revokeFailure };
+}
+
+function readBody(req) {
+  return new Promise((resolve) => {
+    let size = 0;
+    req.on('data', (chunk) => {
+      size += chunk.length;
+      if (size > 4096) req.destroy();
+    });
+    req.on('end', resolve);
+    req.on('error', resolve);
+  });
 }
 
 http
@@ -151,15 +233,18 @@ http
     const url = new URL(req.url, `http://localhost:${OAUTH_PORT}`);
 
     if (url.pathname === '/connect/start') {
-      const slackUserId = url.searchParams.get('slack_user');
-      if (!slackUserId) {
-        sendHtml(res, 400, 'Missing slack_user.');
+      if (!CHAIN_ENABLED) {
+        redirectTo(res, '/?error=disabled');
         return;
       }
+      const slackUserId = url.searchParams.get('slack_user');
       const state = crypto.randomUUID();
-      pendingConnections.set(state, { slackUserId, hackclubVerified: false, createdAt: Date.now() });
-      res.writeHead(302, { Location: hackclubAuthorizeUrl(state) });
-      res.end();
+      pendingConnections.set(state, {
+        slackUserId: slackUserId || null,
+        hackclubVerified: false,
+        createdAt: Date.now(),
+      });
+      redirectTo(res, hackclubAuthorizeUrl(state));
       return;
     }
 
@@ -168,7 +253,7 @@ http
       const state = url.searchParams.get('state');
       const pending = state && getPendingConnection(state);
       if (!code || !pending) {
-        sendHtml(res, 400, 'This connection link expired or is invalid. Use /link-bdaypheus to start again.');
+        redirectTo(res, '/?error=expired');
         return;
       }
 
@@ -186,16 +271,15 @@ http
         });
         const tokenData = await tokenResp.json();
         if (!tokenResp.ok || !tokenData.access_token) {
-          sendHtml(res, 400, "Hack Club Auth didn't confirm your identity. Please try again.");
+          redirectTo(res, '/?error=hackclub');
           await reportError(pending.slackUserId, 'Hack Club Auth connect failed', new Error('did not confirm identity'));
           return;
         }
 
         pending.hackclubVerified = true;
-        res.writeHead(302, { Location: slackAuthorizeUrl(state) });
-        res.end();
+        redirectTo(res, slackAuthorizeUrl(state));
       } catch (err) {
-        sendHtml(res, 500, 'Something went wrong verifying your Hack Club account.');
+        redirectTo(res, '/?error=hackclub');
         await reportError(pending.slackUserId, 'Hack Club Auth token exchange threw', err);
       }
       return;
@@ -207,11 +291,11 @@ http
       const pending = state && getPendingConnection(state);
 
       if (!code) {
-        sendHtml(res, 400, 'Missing code.');
+        redirectTo(res, url.searchParams.get('error') ? '/?error=cancelled' : '/?error=expired');
         return;
       }
       if (CHAIN_ENABLED && (!pending || !pending.hackclubVerified)) {
-        sendHtml(res, 400, 'Hack Club verification is required first. Use /link-bdaypheus to start again.');
+        redirectTo(res, '/?error=expired');
         return;
       }
 
@@ -225,7 +309,7 @@ http
         const userId = result.authed_user && result.authed_user.id;
         const userToken = result.authed_user && result.authed_user.access_token;
         if (!userId || !userToken) {
-          sendHtml(res, 400, "Slack didn't return a user token. If this is a localhost version, amke sure the bot has user scopes enabled.");
+          redirectTo(res, '/?error=slack');
           await reportError(
             pending && pending.slackUserId,
             'Slack connect failed',
@@ -234,23 +318,65 @@ http
           return;
         }
         tokenStore.set(userId, userToken);
-        await notifyAdmin('Personal Slack token added', userId, 'user linked their account via /link-bdaypheus');
-        if (state) pendingConnections.delete(state);
-        sendHtml(
-          res,
-          200,
-          'Connected! You can close this tab and go back to Slack. If you had the /bdaypheus form open, close it and run /bdaypheus again.'
+        await notifyAdmin(
+          'Personal Slack token added',
+          userId,
+          pending && pending.slackUserId ? 'user linked their account via /link-bdaypheus' : 'user linked their account on the website'
         );
+        if (state) pendingConnections.delete(state);
+        const cookie = webSession.sessionCookie(userId);
+        redirectTo(res, '/?connected=1', cookie ? { 'Set-Cookie': cookie } : {});
       } catch (err) {
-        sendHtml(res, 500, 'Something went wrong connecting your account.');
+        redirectTo(res, '/?error=slack');
         await reportError(pending && pending.slackUserId, 'Slack token exchange threw', err);
       }
       return;
     }
 
+    if (url.pathname === '/connect/me' && req.method === 'GET') {
+      const session = webSession.readSession(req);
+      if (!session) {
+        sendJson(res, 200, { signedIn: false, connected: false, linkEnabled: CHAIN_ENABLED });
+        return;
+      }
+      const connected = Boolean(tokenStore.get(session.userId));
+      sendJson(res, 200, {
+        signedIn: true,
+        connected,
+        linkEnabled: CHAIN_ENABLED,
+        name: await slackDisplayName(session.userId),
+        csrf: session.csrf,
+      });
+      return;
+    }
+
+    if ((url.pathname === '/connect/revoke' || url.pathname === '/connect/logout') && req.method === 'POST') {
+      await readBody(req);
+      const session = webSession.readSession(req);
+      const origin = req.headers.origin;
+      if (!session || req.headers['x-bdaypheus-csrf'] !== session.csrf || (origin && PUBLIC_ORIGIN && origin !== PUBLIC_ORIGIN && !origin.startsWith('http://localhost'))) {
+        sendJson(res, 403, { error: 'forbidden' });
+        return;
+      }
+
+      if (url.pathname === '/connect/logout') {
+        sendJson(res, 200, { ok: true }, { 'Set-Cookie': webSession.clearSessionCookie });
+        return;
+      }
+
+      if (!tokenStore.get(session.userId)) {
+        sendJson(res, 200, { ok: true, alreadyRemoved: true });
+        return;
+      }
+      const { revokeFailure } = await unlinkUser(session.userId, 'user revoked it on the website');
+      sendJson(res, 200, { ok: true, revokeFailure });
+      return;
+    }
+
+    if (req.method === 'GET' && serveSite(url.pathname, res)) return;
+
     res.writeHead(404);
     res.end('Not found');
-
   })
 
   .listen(OAUTH_PORT, () => {
@@ -1062,7 +1188,7 @@ app.command('/link-bdaypheus', async ({ command, ack, respond }) => {
   if (tokenStore.get(command.user_id)) {
     await respond({
       response_type: 'ephemeral',
-      text: "You're already connected! I'll use that connection automatically next time I need to read a private channel you're in.",
+      text: "You're already connected! I'll use that connection automatically the next time you run /bdaypheus.",
       blocks: [
         {
           type: 'section',
@@ -1070,7 +1196,7 @@ app.command('/link-bdaypheus', async ({ command, ack, respond }) => {
             type: 'mrkdwn',
             text:
               ":white_check_mark: You're already connected! No need to do this again! I'll use it " +
-              "automatically the next time I need to read a private channel you're in.",
+              "automatically the next time you run /bdaypheus.",
           },
         },
         {
@@ -1100,15 +1226,15 @@ app.command('/link-bdaypheus', async ({ command, ack, respond }) => {
 
   await respond({
     response_type: 'ephemeral',
-    text: 'Connect your Slack account (verifies with Hack Club Auth first) so I can read private channels you\'re in:',
+    text: 'Connect your Slack account (verifies with Hack Club Auth first) so I can read channels you\'re in and create planning channels for you:',
     blocks: [
       {
         type: 'section',
         text: {
           type: 'mrkdwn',
           text:
-            'Connect your Slack account so I can read private channels you\'re in ' +
-            "you'll verify with Hack Club Auth first, then grant Slack access.",
+            'Connect your Slack account so I can read the member list of channels you\'re in (including private ones) ' +
+            "and create planning channels for you. You'll verify with Hack Club Auth first, then grant Slack access.",
         },
       },
       {
@@ -1141,19 +1267,9 @@ app.command('/unlink-bdaypheus', async ({ command, ack, respond }) => {
     return;
   }
 
-  let revokeFailure = null;
-  try {
-    await new WebClient(tokenStore.get(command.user_id)).auth.revoke();
-  } catch (err) {
-    const code = errorDetail(err);
-    const alreadyDead = ['token_revoked', 'invalid_auth', 'account_inactive'].includes(code);
-    if (!alreadyDead) revokeFailure = code;
-  }
-
-  tokenStore.remove(command.user_id);
+  const { revokeFailure } = await unlinkUser(command.user_id, 'user ran /unlink-bdaypheus');
 
   if (revokeFailure) {
-    await notifyAdmin('Personal Slack token removed but revoke failed', command.user_id, revokeFailure);
     await respond({
       response_type: 'ephemeral',
       text:
@@ -1163,15 +1279,12 @@ app.command('/unlink-bdaypheus', async ({ command, ack, respond }) => {
     return;
   }
 
-  await notifyAdmin('Personal Slack token removed', command.user_id, 'user ran /unlink-bdaypheus');
-
   await respond({
     response_type: 'ephemeral',
     text:
       ":white_check_mark: Your connected Slack account (token) was revoked and removed.\n\n" +
-      ":warning: *Heads up:* until you reconnect, I won't be able to invite people from a *private* channel " +
-      "you're not letting me read (I'll prompt you to reconnect if you try). This doesn't affect adding people " +
-      "to a private *planning* channel: that only needs me to already be a member of it, not your token.",
+      ":warning: *Heads up:* until you reconnect, I can't create planning channels for you or invite people " +
+      "from a *private* channel I'm not in. You can still use a planning channel you made yourself, as long as I'm in it.",
   });
 });
 

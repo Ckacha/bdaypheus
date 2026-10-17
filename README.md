@@ -14,7 +14,7 @@ If it is down, dm [@iamalive](https://hackclub.slack.com/team/U0828FYS2UC) on sl
     Model to invite people from a user group/channel to a birthday planning channel. The bot can create a new private channel for you, or you can pick one you already made
 
 /link-bdaypheus
-    Used to link your slack account to add people from private channels(check the part below for why this is)
+    Used to link your slack account so the bot can create planning channels as you and add people from private channels. Once linked, it reads whichever channel you invite from with your token (check the part below for why this is)
 
 /unlink-bdaypheus
     Used to unlink your slack account and get rid of your personal token(check [warning.md](docs/warning.md) fur full explanation)

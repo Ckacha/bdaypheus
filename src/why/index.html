@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Why Link Bdaypheus?</title>
+    <meta name="description" content="Why Bdaypheus asks you to link your Hack Club Auth and Slack account.">
+    <link rel="icon" href="../avatar.jpg">
+    <link rel="stylesheet" href="../style.css">
+  </head>
+
+  <body>
+    <main>
+      <nav>
+        <a href="../">Home</a>
+        <a href="../how-to-use/">How to use</a>
+        <a href="./" aria-current="page">Why link?</a>
+        <a href="../warning/">Warning</a>
+      </nav>
+
+      <header>
+        <p class="eyebrow">bdaypheus</p>
+        <h1>why do I need to link my account?</h1>
+        <p class="lede">
+          Some things a bot just isn't allowed to do in Slack. Linking lets Bdaypheus do them as you.
+        </p>
+      </header>
+
+      <section class="cards">
+        <div class="card can">
+          <h2>Creating a planning channel</h2>
+          <p>
+            When you pick "Create a new private channel for me" in <code>/bdaypheus</code>, the
+            channel is created with your account. Slack makes whoever creates a channel its
+            channel manager, so you can rename it, archive it, and manage it yourself.
+          </p>
+        </div>
+        <div class="card can">
+          <h2>Inviting from a private channel</h2>
+          <p>
+            The bot can't see who's in a private channel it isn't in. With your account linked, it reads the
+            member list of the channel you invite from using <em>your</em> access, so it knows who to invite.
+            Once you're linked it does this for every channel you pick, public or private.
+          </p>
+        </div>
+      </section>
+
+      <section>
+        <h2>Why can't the bot just make the channel?</h2>
+        <p>
+          It could, but then the bot would be the channel manager, not you, and you couldn't
+          rename or archive your own planning channel. Slack doesn't let regular bots hand that role to anyone
+          else. The only way to set channel managers through the API is an admin-only tool that has to be
+          installed across all of Hack Club by an org admin, which Bdaypheus isn't.
+        </p>
+      </section>
+
+      <section>
+        <h2>Why not just add the bot to my private channel?</h2>
+        <p>
+          You can! But adding a bot literally called Bdaypheus to your friends' private channel is a bit sus,
+          and it'd see that channel forever. Linking means it only reads the member list when you run
+          <code>/bdaypheus</code>.
+        </p>
+      </section>
+
+      <section>
+        <h2>Why Hack Club Auth?</h2>
+        <p>
+          Before Slack asks you to approve anything, you sign in with Hack Club Auth. That confirms the person
+          linking is really you, so nobody can attach their own Slack token to your account.
+        </p>
+      </section>
+
+      <section>
+        <h2>How to link</h2>
+        <ol>
+          <li>Run <code>/link-bdaypheus</code> in Slack, or press "Connect your Slack account" in the invite form.</li>
+          <li>Sign in with Hack Club Auth.</li>
+          <li>Approve the Slack permissions.</li>
+          <li>Close the <code>/bdaypheus</code> form if it's open and run it again. It won't notice the new link until you reopen it.</li>
+        </ol>
+        <p class="note">
+          Linked before channel creation existed? Run <code>/link-bdaypheus</code> and press
+          "Reconnect anyway" to grant the new permission.
+        </p>
+      </section>
+
+      <section>
+        <h2>What exactly does it get?</h2>
+        <p>
+          The full list of permissions, what they're used for, and how to revoke them is on the
+          <a href="../warning/">warning page</a>.
+        </p>
+      </section>
+
+      <footer>
+        <a href="https://github.com/CKacha/bday-bot">Source</a> · running
+        <a href="https://github.com/CKacha/bday-bot/commit/__COMMIT__"><code>__COMMIT_SHORT__</code></a>
+      </footer>
+    </main>
+  </body>
+</html>

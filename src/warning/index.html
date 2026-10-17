@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Bdaypheus Token Warning</title>
+    <meta name="description" content="What linking your Slack account to Bdaypheus gives the bot, and how to undo it.">
+    <link rel="icon" href="../avatar.jpg">
+    <link rel="stylesheet" href="../style.css">
+  </head>
+
+  <body>
+    <main>
+      <nav>
+        <a href="../">Home</a>
+        <a href="../how-to-use/">How to use</a>
+        <a href="../why/">Why link?</a>
+        <a href="./" aria-current="page">Warning</a>
+      </nav>
+
+      <header>
+        <p class="eyebrow">bdaypheus</p>
+        <h1>smol warning for ya</h1>
+        <p class="lede">
+          Linking your Slack account to this bot creates a personal Slack access token tied to your account.
+        </p>
+      </header>
+
+      <section class="cards">  
+        <div class="card can">
+          <h2>What it can do</h2>
+          <ul>
+            <li>Read the name and full member list of any channel you are in. Bdaypheus does this for the channel you pick under "Channel to invite from" in <code>/bdaypheus</code>, public or private.</li>
+            <li>Create a private planning channel as you when you pick "Create a new private channel" in <code>/bdaypheus</code>, then add the bot to it.</li>
+          </ul>
+        </div>
+        <div class="card cant">
+          <h2>What it can't do</h2>
+          <ul>
+            <li>No reading messages, no posting as you, nothing else.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section>
+        <h2>The exact permissions</h2>
+        <ul>
+          <li><code>channels:read</code> and <code>groups:read</code>: see the name and member list of public and private channels you're in.</li>
+          <li><code>groups:write</code>: create private channels and invite people to them. Bdaypheus only uses it to create your planning channel and add itself.</li>
+        </ul>
+        <p class="note">
+          Slack's <code>groups:write</code> technically covers more than that (like renaming or archiving private
+          channels you're in). Bdaypheus never does those, and the code is
+          <a href="https://github.com/CKacha/bday-bot">open source</a> if you want to check.
+        </p>
+      </section>
+
+      <section>
+        <h2>Where it's kept</h2>
+        <p>
+          Your token is stored on the server Bdaypheus runs on, and only used when you run <code>/bdaypheus</code>.
+          The bot admin gets a DM whenever someone links or unlinks.
+        </p>
+      </section>
+
+      <section>
+        <h2>How to revoke it</h2>
+        <ol>
+          <li>Run <code>/unlink-bdaypheus</code> in Slack. This revokes the token and deletes it from the bot.</li>
+          <li>Or remove it yourself: Slack → your apps → Bday Bot → Remove.</li>
+        </ol>
+        <p class="note">
+          After revoking, Bdaypheus asks you to link again next time it needs your token.
+          <a href="../why/">Why it needs one at all</a>.
+        </p>
+      </section>
+
+      <footer>
+        <a href="https://github.com/CKacha/bday-bot">Source</a> · running
+        <a href="https://github.com/CKacha/bday-bot/commit/__COMMIT__"><code>__COMMIT_SHORT__</code></a>
+      </footer>
+    </main>
+  </body>
+</html>

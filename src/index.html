@@ -3,65 +3,89 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Bdaypheus Token Info</title>
-    <meta name="description" content="What connecting your Slack account to Bdaypheus does, and how to undo it.">
+    <title>Bdaypheus</title>
+    <meta name="description" content="A Slack bot that invites people to secretly plan a birthday, without force-adding anyone to a channel.">
+    <link rel="icon" href="avatar.jpg">
     <link rel="stylesheet" href="style.css">
+    <script src="home.js" defer></script>
   </head>
 
   <body>
-    <main>
-      <header>
-        <p class="eyebrow">bdaypheus</p>
-        <h1>smol warning for ya</h1>
-        <p class="lede">
-          Connecting your Slack account to this bot creates a personal Slack access token tied to your account.
-          Here's exactly what that means.
-        </p>
-      </header>
+    <main class="home">
+      <nav>
+        <a href="./" aria-current="page">Home</a>
+        <a href="how-to-use/">How to use</a>
+        <a href="why/">Why link?</a>
+        <a href="warning/">Warning</a>
+      </nav>
 
-      <section class="cards">
-        <div class="card can">
-          <h2>What it can do</h2>
-          <ul>
-            <li>Read the name, topic, and full member list of every channel you are in.</li>
-            <li>Create a private planning channel as you when you pick "Create a new private channel" in <code>/bdaypheus</code>, so you are its channel manager, then add the bot to it.</li>
-          </ul>
+      <p class="notice" id="notice" role="status" hidden></p>
+
+      <div class="home-grid">
+        <header class="hero">
+          <figure class="pfp">
+            <img class="avatar" src="avatar.jpg" alt="Bdaypheus's profile picture" width="112" height="112">
+            <figcaption>yes i suck at art</figcaption>
+          </figure>
+          <div>
+            <h1>Bdaypheus</h1>
+            <p class="lede">
+              Annoyed at being added to random birthday channels for no reason? Well with Bdaypheus
+              <span class="aside-note">(bday + orpheus)</span>, you're now able to send a mass invite to people and get them added to the proper
+              channel easily.
+            </p>
+          </div>
+        </header>
+
+        <aside class="card account" aria-labelledby="account-title">
+          <div id="signed-out">
+            <h2 id="account-title">Link your Slack account</h2>
+            <p>Needed for a few functions, check <a href="why/">here</a> for why.</p>
+            <p class="actions">
+              <a class="button" id="login" href="/connect/start">Log in with Slack</a>
+            </p>
+            <p class="fine">You'll sign in with Hack Club Auth and authorize Slack, read the <a href="warning/">warning</a> before to know what it can do!</p>
+          </div>
+
+          <div id="signed-in" hidden>
+            <h2><span class="dot" aria-hidden="true"></span> Connected<span id="who"></span></h2>
+            <p>
+              Your Slack account is linked to Bdaypheus. It only uses your token when you run <code>/bdaypheus</code>/ the parts that require user tokens.
+            </p>
+            <p class="actions">
+              <button class="button danger" id="revoke" type="button">Revoke my token</button>
+              <button class="button ghost" id="logout" type="button">Log out</button>
+            </p>
+            <p class="fine">Revoking deletes your token and tells Slack to cancel it, same as running <code>/unlink-bdaypheus</code>.</p>
+          </div>
+        </aside>
+
+        <div class="home-rest">
+          <section>
+            <h2>How it works</h2>
+            <ol class="steps">
+              <li><span>Run <code>/bdaypheus</code> and pick who to invite, whose birthday it is, and when.</span></li>
+              <li><span>Bdaypheus then will send out an invite DM to everyone you designate.</span></li>
+              <li><span>If they accept the invite, they'll automatically get added to the planning channel!</span></li>
+            </ol>
+            <p class="fine">An explanation of the bot and its commands is listed <a href="how-to-use/">here</a>.</p>
+          </section>
+
+          <section>
+            <h2>Questions?</h2>
+            <p>
+              Check out <a href="why/">why linking is needed</a> and the <a href="warning/">warning page</a> for what
+              your token can and can't do. If you have any more (or something's broken), ask in
+              <a href="https://hackclub.enterprise.slack.com/archives/C0BS244S0F4">#bdaypheus-dev</a> or ping
+              <a href="https://hackclub.slack.com/team/U0828FYS2UC">@iamalive</a> on Slack.
+            </p>
+          </section>
         </div>
-        <div class="card cant">
-          <h2>What it can't do</h2>
-          <ul>
-            <li>Everything not listed under "What it can do". No reading messages, no posting as you, nothing else.</li>
-          </ul>
-        </div>
-      </section>
-
-      <section>
-        <h2>Why?</h2>
-        <p>
-          The bot can only see the member lists of public channels and ping groups. If you want to invite people
-          from a private channel (say, a private channel of your friends), the bot can't see who's in it.
-        </p>
-        <p>
-          To fix that, you can go through a Hack Club Auth + Slack auth flow that gives the bot your personal
-          Slack token, used <strong>only</strong> to read the members of private channels you're in and to create
-          planning channels for you. That's it! <a href="why/">More on why</a>.
-        </p>
-      </section>
-
-      <section>
-        <h2>How to revoke it</h2>
-        <ol>
-          <li>Run <code>/unlink-bdaypheus</code> in Slack. This revokes the token and deletes it from the bot.</li>
-          <li>Or remove it yourself: Slack → your apps → Bday Bot → Remove.</li>
-        </ol>
-        <p class="note">
-          After revoking, the next time the bot needs to read a private channel you're in, it'll just ask you to
-          connect again.
-        </p>
-      </section>
+      </div>
 
       <footer>
-        <a href="https://github.com/CKacha/bday-bot#readme">Source &amp; setup docs on GitHub</a>
+        <a href="https://github.com/CKacha/bday-bot">Source</a> · running
+        <a href="https://github.com/CKacha/bday-bot/commit/__COMMIT__"><code>__COMMIT_SHORT__</code></a>
       </footer>
     </main>
   </body>
