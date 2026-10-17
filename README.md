@@ -20,10 +20,10 @@ If it is down, dm [@iamalive](https://hackclub.slack.com/team/U0828FYS2UC) on sl
     Used to unlink your slack account and get rid of your personal token(check [warning.md](docs/warning.md) fur full explanation)
 
 /send-reminders 
-    DMs everyone who hasn't accepted or declined yet a nudge with a link to their original invite!
+    DMs everyone who hasn't accepted or declined yet a nudge with a link to their original invite! If you started more than one birthday card, it pops up a list so you can pick which one to remind
 
 /send-reminders [@birthday person]
-    Same thing, for a specific birthday person's invites (use this if you have more than one going)!
+    Same thing, but skips the list and goes straight to that birthday person's card
 
 ## Private channels
 

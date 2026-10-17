@@ -236,7 +236,11 @@ http
         tokenStore.set(userId, userToken);
         await notifyAdmin('Personal Slack token added', userId, 'user linked their account via /link-bdaypheus');
         if (state) pendingConnections.delete(state);
-        sendHtml(res, 200, 'Connected! You can close this tab and go back to Slack.');
+        sendHtml(
+          res,
+          200,
+          'Connected! You can close this tab and go back to Slack. If you had the /bdaypheus form open, close it and run /bdaypheus again.'
+        );
       } catch (err) {
         sendHtml(res, 500, 'Something went wrong connecting your account.');
         await reportError(pending && pending.slackUserId, 'Slack token exchange threw', err);
@@ -426,6 +430,8 @@ function buildFormBlocks({
   birthdayDate,
   destMode = 'create',
   needsLink = false,
+  showMessage = false,
+  pickedSelf = false,
   destChannelId,
   channelName,
   groupIds = [],
@@ -438,6 +444,7 @@ function buildFormBlocks({
   const effectiveRecipients = (recipientIds.length ? recipientIds : autoRecipients).filter(
     (id) => id !== birthdayUserId
   );
+  const defaultsKey = `${birthdayUserId || 'none'}-${(birthdayDate || '').slice(0, 4)}`;
 
   return [
     {
@@ -452,7 +459,7 @@ function buildFormBlocks({
     {
       type: 'input',
       block_id: 'source_block',
-      label: { type: 'plain_text', text: 'Channel to invite from' },
+      label: { type: 'plain_text', text: 'Channel to invite from *' },
       dispatch_action: true,
       element: {
         type: 'conversations_select',
@@ -486,7 +493,7 @@ function buildFormBlocks({
     {
       type: 'input',
       block_id: 'bday_block',
-      label: { type: 'plain_text', text: "Who's the birthday person?" },
+      label: { type: 'plain_text', text: "Who's the birthday person? *" },
       dispatch_action: true,
       element: {
         type: 'users_select',
@@ -494,10 +501,14 @@ function buildFormBlocks({
         ...(birthdayUserId ? { initial_user: birthdayUserId } : {}),
       },
     },
+    ...(pickedSelf
+      ? [{ type: 'context', elements: [{ type: 'mrkdwn', text: SELF_PICK_WARNING }] }]
+      : []),
     {
       type: 'input',
       block_id: 'bday_date_block',
-      label: { type: 'plain_text', text: 'When is their birthday?' },
+      label: { type: 'plain_text', text: 'When is their birthday? *' },
+      dispatch_action: true,
       element: {
         type: 'datepicker',
         action_id: 'bday_date_select',
@@ -507,7 +518,7 @@ function buildFormBlocks({
     {
       type: 'input',
       block_id: 'dest_mode_block',
-      label: { type: 'plain_text', text: 'Planning channel' },
+      label: { type: 'plain_text', text: 'Planning channel *' },
       dispatch_action: true,
       element: {
         type: 'radio_buttons',
@@ -519,8 +530,8 @@ function buildFormBlocks({
     ...(destMode === 'create'
       ? [{
           type: 'input',
-          block_id: 'new_channel_block',
-          label: { type: 'plain_text', text: 'New channel name' },
+          block_id: versionedBlockId('new_channel_block', defaultsKey),
+          label: { type: 'plain_text', text: 'New channel name *' },
           element: {
             type: 'plain_text_input',
             action_id: 'new_channel_input',
@@ -537,7 +548,7 @@ function buildFormBlocks({
       : [{
           type: 'input',
           block_id: 'dest_block',
-          label: { type: 'plain_text', text: 'Existing planning channel (the one you manage)' },
+          label: { type: 'plain_text', text: 'Existing planning channel (the one you manage) *' },
           dispatch_action: true,
           element: {
             type: 'conversations_select',
@@ -546,10 +557,10 @@ function buildFormBlocks({
             ...(destChannelId ? { initial_conversation: destChannelId } : {}),
           },
         }]),
-    {
+    ...(showMessage ? [{
       type: 'input',
-      block_id: 'message_block',
-      label: { type: 'plain_text', text: 'Message to send' },
+      block_id: versionedBlockId('message_block', defaultsKey),
+      label: { type: 'plain_text', text: 'Message to send *' },
       dispatch_action: true,
       element: {
         type: 'rich_text_input',
@@ -561,9 +572,9 @@ function buildFormBlocks({
         type: 'plain_text',
         text: "If you want to update what this'll look like, press ctrl + enter! It won't send the thing",
       },
-    },
+    }] : []),
 
-    ...(sourceChannelId
+    ...(showMessage
       ? [
           {
             type: 'input',
@@ -582,9 +593,12 @@ function buildFormBlocks({
   ];
 }
 
+const SELF_PICK_WARNING = "That's you! You can't plan your own birthday, pick someone else.";
+
 const WHY_URL = 'https://bdaypheus.ckacha.dev/why';
 
-const NEEDS_LINK_FIELD_ERROR = 'This needs you to link your Hack Club Auth and Slack first. Check the note below.';
+const NEEDS_LINK_FIELD_ERROR =
+  'This needs you to link your Hack Club Auth and Slack first. Check the note below, then close this form and run /bdaypheus again.';
 
 const NEEDS_RELINK_ERRORS = ['missing_scope', 'invalid_auth', 'token_revoked', 'not_authed', 'account_inactive', 'token_expired'];
 
@@ -599,6 +613,15 @@ function linkNoticeBlocks(inviterId) {
           ':link: Hey, this needs you to link your Hack Club Auth and Slack to make this work. ' +
           `<${WHY_URL}|Check why here>.`,
       },
+    },
+    {
+      type: 'context',
+      elements: [
+        {
+          type: 'mrkdwn',
+          text: "Once you've linked, close this form and run */bdaypheus* again. It won't notice the new link until you reopen it.",
+        },
+      ],
     },
     ...(connectUrl
       ? [
@@ -739,7 +762,7 @@ async function checkDestChannelAccess(client, destChannelId) {
 
 async function buildPreview(
   client,
-  { sourceChannelId, birthdayUserId, inviterId, groupIds, messageInput, destChannelId }
+  { sourceChannelId, birthdayUserId, inviterId, groupIds, messageInput, destChannelId, showMessage }
 ) {
   const blocks = [];
   let autoRecipients = [];
@@ -762,8 +785,6 @@ async function buildPreview(
 
   if (!sourceChannelId) return { blocks, autoRecipients };
 
-  blocks.push({ type: 'divider' });
-
   try {
     const { recipients, sourceChannelName } = await computeAutoRecipients(client, {
       sourceChannelId,
@@ -773,28 +794,30 @@ async function buildPreview(
     });
     autoRecipients = recipients;
 
-    if (birthdayUserId) {
+    if (showMessage) {
       const message = isEmptyMessage(messageInput) ? defaultMessage(birthdayUserId, inviterId) : messageInput;
+      blocks.push({ type: 'divider' });
       blocks.push({
         type: 'section',
         text: { type: 'mrkdwn', text: '*btw, this is what recipients will receive:*' },
       });
       blocks.push(...messageContent(message).blocks);
-    }
 
-    const groupNote = groupIds && groupIds.length
-      ? ` + ${groupIds.length} group${groupIds.length === 1 ? '' : 's'}`
-      : '';
-    blocks.push({
-      type: 'context',
-      elements: [
-        {
-          type: 'mrkdwn',
-          text: `Auto-filled ${recipients.length} ${recipients.length === 1 ? 'person' : 'people'} from #${sourceChannelName}${groupNote} into the list below. Edit it to add or remove anyone.`,
-        },
-      ],
-    });
+      const groupNote = groupIds && groupIds.length
+        ? ` + ${groupIds.length} group${groupIds.length === 1 ? '' : 's'}`
+        : '';
+      blocks.push({
+        type: 'context',
+        elements: [
+          {
+            type: 'mrkdwn',
+            text: `Auto-filled ${recipients.length} ${recipients.length === 1 ? 'person' : 'people'} from #${sourceChannelName}${groupNote} into the list below. Edit it to add or remove anyone.`,
+          },
+        ],
+      });
+    }
   } catch (err) {
+    blocks.push({ type: 'divider' });
     const dmKey = `${inviterId}:${sourceChannelId}:${err.needsConnect ? 'connect' : 'error'}`;
     const alreadyNotified = notifiedAccessFailures.has(dmKey);
     notifiedAccessFailures.add(dmKey);
@@ -879,9 +902,19 @@ async function buildPreview(
   return { blocks, autoRecipients };
 }
 
+function versionedBlockId(base, key) {
+  return key ? `${base}.${key}` : base;
+}
+
+function findBlockId(ids, base) {
+  return ids.find((id) => id === base || id.startsWith(`${base}.`));
+}
+
 function readFormState(values) {
   const groupSelect = values.group_block && values.group_block.group_select;
   const recipientsSelect = values.recipients_block && values.recipients_block.recipients_select;
+  const channelBlock = values[findBlockId(Object.keys(values), 'new_channel_block')];
+  const messageBlock = values[findBlockId(Object.keys(values), 'message_block')];
   return {
     sourceChannelId: values.source_block && values.source_block.source_select.selected_conversation,
     birthdayUserId: values.bday_block && values.bday_block.bday_select.selected_user,
@@ -892,12 +925,12 @@ function readFormState(values) {
         values.dest_mode_block.dest_mode_select.selected_option.value) ||
       'create',
     destChannelId: values.dest_block && values.dest_block.dest_select.selected_conversation,
-    channelName: values.new_channel_block && values.new_channel_block.new_channel_input.value,
+    channelName: channelBlock && channelBlock.new_channel_input.value,
     groupIds: (groupSelect && groupSelect.selected_options ? groupSelect.selected_options : []).map(
       (o) => o.value
     ),
     recipientIds: (recipientsSelect && recipientsSelect.selected_users) || [],
-    messageInput: values.message_block && values.message_block.message_input.rich_text_value,
+    messageInput: messageBlock && messageBlock.message_input.rich_text_value,
   };
 }
 
@@ -906,7 +939,7 @@ async function refreshModal(body, client) {
   try {
     const {
       sourceChannelId,
-      birthdayUserId,
+      birthdayUserId: pickedBirthdayUserId,
       birthdayDate,
       destMode,
       destChannelId,
@@ -915,6 +948,8 @@ async function refreshModal(body, client) {
       recipientIds,
       messageInput,
     } = readFormState(body.view.state.values);
+    const pickedSelf = pickedBirthdayUserId === inviterId;
+    const birthdayUserId = pickedSelf ? null : pickedBirthdayUserId;
 
     let previous = {};
     try {
@@ -927,6 +962,7 @@ async function refreshModal(body, client) {
     const message = messageUntouched ? defaultMsg : messageInput;
 
     const previewDestId = destMode === 'existing' ? destChannelId : null;
+    const showMessage = Boolean(sourceChannelId && birthdayUserId && birthdayDate);
     const [usergroupOptions, preview, defaultChannelName] = await Promise.all([
       getUsergroupOptions(client),
       buildPreview(client, {
@@ -936,6 +972,7 @@ async function refreshModal(body, client) {
         groupIds,
         messageInput: message,
         destChannelId: previewDestId,
+        showMessage,
       }),
       birthdayUserId ? getDefaultChannelName(client, birthdayUserId, birthdayDate) : null,
     ]);
@@ -945,6 +982,8 @@ async function refreshModal(body, client) {
 
     const formBlocks = buildFormBlocks({
       needsLink: !tokenStore.get(inviterId),
+      showMessage,
+      pickedSelf,
       sourceChannelId,
       birthdayUserId,
       birthdayDate,
@@ -1136,46 +1175,26 @@ app.command('/unlink-bdaypheus', async ({ command, ack, respond }) => {
   });
 });
 
-app.command('/send-reminders', async ({ command, ack, client }) => {
-  await ack();
+function pendingInvitees(record) {
+  return Object.keys(record.invites || {}).filter(
+    (userId) => birthdayStore.statusOf(record.invites[userId]) === 'pending'
+  );
+}
 
-  const inviterId = command.user_id;
-  const mentionMatch = (command.text || '').match(/<@([A-Z0-9]+)(\|[^>]*)?>/);
-  const mentionedId = mentionMatch && mentionMatch[1];
-  const active = birthdayStore.getActiveByInviter(inviterId);
+function shortDate(date) {
+  return new Date(`${date}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+}
 
-  let entry;
-  if (mentionedId) {
-    entry = active.find((e) => e.birthdayUserId === mentionedId);
-    if (!entry) {
-      const other = birthdayStore.getActive(mentionedId);
-      await client.chat.postMessage({
-        channel: inviterId,
-        text: other
-          ? `Only <@${other.inviterId}> can send reminders for <@${mentionedId}>'s birthday, since they sent the invites.`
-          : `You don't have any invites out for <@${mentionedId}>'s birthday.`,
-      });
-
-      return;
-    }
-
-  } else if (active.length === 1) {
-    entry = active[0];
-
-  } else {
-    await client.chat.postMessage({
-      channel: inviterId,
-      text: active.length
-        ? `You have invites out for ${active.map((e) => `<@${e.birthdayUserId}>`).join(', ')}. ` +
-          'Pick one with `/send-reminders @person`.'
-        : "You don't have any birthday invites out right now. Send some with /bdaypheus first!",
-    });
-
-    return;
+async function displayName(client, userId) {
+  try {
+    const { user } = await client.users.info({ user: userId });
+    return (user.profile && user.profile.display_name) || user.real_name || user.name || userId;
+  } catch (err) {
+    return userId;
   }
+}
 
-  const { birthdayUserId, record } = entry;
-
+async function sendRemindersFor(client, inviterId, birthdayUserId, record) {
   try {
     const destMembers = new Set(await getChannelMembers(botClient, record.destChannelId));
     for (const userId of Object.keys(record.invites || {})) {
@@ -1186,15 +1205,12 @@ app.command('/send-reminders', async ({ command, ack, client }) => {
   } catch (err) {
   }
 
-  const pending = Object.keys(record.invites || {}).filter(
-    (userId) => birthdayStore.statusOf(record.invites[userId]) === 'pending'
-  );
+  const pending = pendingInvitees(record);
   if (!pending.length) {
     await client.chat.postMessage({
       channel: inviterId,
       text: `:white_check_mark: Everyone invited for <@${birthdayUserId}>'s birthday has already responded!`,
     });
-
     return;
   }
 
@@ -1226,7 +1242,6 @@ app.command('/send-reminders', async ({ command, ack, client }) => {
   const lines = [
     `:yay: Sent reminders to ${sentCount} ${sentCount === 1 ? 'person' : 'people'} who haven't responded yet for <@${birthdayUserId}>'s birthday.`,
   ];
-  
   if (failures.length) {
     lines.push(`Couldn't DM: ${failures.map((id) => `<@${id}>`).join(', ')}`);
   }
@@ -1234,9 +1249,132 @@ app.command('/send-reminders', async ({ command, ack, client }) => {
     channel: inviterId,
     text: lines.join('\n'),
   });
+}
+
+async function reminderPickerModal(client, active) {
+  const useRadio = active.length <= 10;
+  const options = await Promise.all(
+    active.map(async ({ birthdayUserId, record }) => {
+      const waiting = pendingInvitees(record).length;
+      const details = `${shortDate(record.date)} · ${waiting} ${waiting === 1 ? "hasn't" : "haven't"} responded`;
+      return {
+        text: useRadio
+          ? { type: 'mrkdwn', text: `<@${birthdayUserId}>'s birthday · ${details}` }
+          : { type: 'plain_text', text: `${await displayName(client, birthdayUserId)}'s birthday · ${details}`.slice(0, 75) },
+        value: birthdayUserId,
+      };
+    })
+  );
+
+  return {
+    type: 'modal',
+    callback_id: 'reminder_pick',
+    title: { type: 'plain_text', text: 'Send reminders' },
+    submit: { type: 'plain_text', text: 'Send reminders' },
+    close: { type: 'plain_text', text: 'Cancel' },
+    blocks: [
+      {
+        type: 'input',
+        block_id: 'reminder_pick_block',
+        label: { type: 'plain_text', text: 'Which birthday card do you want to remind? *' },
+        element:
+          useRadio
+            ? { type: 'radio_buttons', action_id: 'reminder_pick_select', options }
+
+            : {
+                type: 'static_select',
+                action_id: 'reminder_pick_select',
+                placeholder: { type: 'plain_text', text: 'Pick a birthday' },
+                options: options.slice(0, 100),
+              },
+
+        hint: {
+          type: 'plain_text',
+          text: "I'll DM everyone who hasn't accepted or declined yet, with a link to their original invite.",
+        },
+      },
+    ],
+  };
+}
+
+app.command('/send-reminders', async ({ command, ack, client }) => {
+  await ack();
+
+  const inviterId = command.user_id;
+  const mentionMatch = (command.text || '').match(/<@([A-Z0-9]+)(\|[^>]*)?>/);
+  const mentionedId = mentionMatch && mentionMatch[1];
+  const active = birthdayStore.getActiveByInviter(inviterId);
+
+  if (mentionedId) {
+    const entry = active.find((e) => e.birthdayUserId === mentionedId);
+    if (!entry) {
+      const other = birthdayStore.getActive(mentionedId);
+      await client.chat.postMessage({
+        channel: inviterId,
+        text: other
+          ? `Only <@${other.inviterId}> can send reminders for <@${mentionedId}>'s birthday, since they sent the invites.`
+          : `You don't have any invites out for <@${mentionedId}>'s birthday.`,
+      });
+
+      return;
+    }
+
+    await sendRemindersFor(client, inviterId, entry.birthdayUserId, entry.record);
+    return;
+  }
+
+  if (!active.length) {
+    await client.chat.postMessage({
+      channel: inviterId,
+      text: "You don't have any birthday invites out right now. Send some with /bdaypheus first!",
+    });
+
+    return;
+  }
+
+  if (active.length === 1) {
+    await sendRemindersFor(client, inviterId, active[0].birthdayUserId, active[0].record);
+    return;
+  }
+
+  try {
+    await client.views.open({ trigger_id: command.trigger_id, view: await reminderPickerModal(client, active) });
+  } catch (err) {
+    await client.chat.postMessage({
+      channel: inviterId,
+      text:
+        `:warning: Couldn't open the reminder picker (${errorDetail(err)}). You have invites out for ` +
+        `${active.map((e) => `<@${e.birthdayUserId}>`).join(', ')}, so you can also run \`/send-reminders @person\`.`,
+    });
+    
+    await notifyAdmin("Couldn't open the /send-reminders picker", inviterId, errorDetail(err));
+  }
+});
+
+app.view('reminder_pick', async ({ ack, view, body, client }) => {
+  const inviterId = body.user.id;
+  const pick = view.state.values.reminder_pick_block.reminder_pick_select;
+  const birthdayUserId = pick.selected_option && pick.selected_option.value;
+  const record = birthdayUserId && birthdayStore.getActive(birthdayUserId);
+
+  if (!record || record.inviterId !== inviterId) {
+    await ack({
+      response_action: 'errors',
+      errors: { reminder_pick_block: "That birthday isn't one of yours anymore (it may have passed). Pick another one." },
+    });
+    return;
+  }
+
+  await ack();
+  await sendRemindersFor(client, inviterId, birthdayUserId, record);
 });
 
 app.action('source_select', async ({ ack, body, client }) => {
+  await ack();
+  await refreshModal(body, client);
+});
+
+app.action('bday_date_select', async ({ ack, body, client }) => {
   await ack();
   await refreshModal(body, client);
 });
@@ -1305,12 +1443,21 @@ app.view('bday_confirm', async ({ ack, view, client, body }) => {
 
   const rejectSubmit = (errors) => {
     const failed = [...new Set(Object.keys(errors).map((id) => FIELD_LABELS[id] || id))];
-    const hasSummaryField = view.blocks.some((b) => b.block_id === SUMMARY_BLOCK_ID);
-    if (hasSummaryField && !errors[SUMMARY_BLOCK_ID]) {
-      errors[SUMMARY_BLOCK_ID] = `:warning: Couldn't send yet. Fix ${failed.join(', ')} above.`;
+    const viewIds = view.blocks.map((b) => b.block_id).filter(Boolean);
+    const mapped = {};
+    for (const [base, message] of Object.entries(errors)) {
+      mapped[findBlockId(viewIds, base) || base] = message;
     }
-    return ack({ response_action: 'errors', errors });
+    if (viewIds.includes(SUMMARY_BLOCK_ID) && !mapped[SUMMARY_BLOCK_ID]) {
+      mapped[SUMMARY_BLOCK_ID] = `:warning: Couldn't send yet. Fix ${failed.join(', ')} above.`;
+    }
+    return ack({ response_action: 'errors', errors: mapped });
   };
+
+  if (birthdayUserId === inviterId) {
+    await rejectSubmit({ bday_block: "That's you! You can't plan your own birthday, pick someone else." });
+    return;
+  }
 
   const existing = birthdayStore.getActive(birthdayUserId);
   if (existing && existing.inviterId !== inviterId) {
