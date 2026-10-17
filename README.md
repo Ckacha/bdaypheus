@@ -1,7 +1,10 @@
-# bday-bot
-Slack bot to invite people to birthday card channels!
+# bdaypheus
+
+A slack bot to invite people to birthday card channels!
 
 Uhh people annoyed about being added to many bday card channels and here is my solution
+
+The current readme is a bit less detailed; if you want a better rundown of this bot, please visit [bdaypheus.ckacha.dev](https://bdaypheus.ckacha.dev)
 
 ## How to set up:
 
