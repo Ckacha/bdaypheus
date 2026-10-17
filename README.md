@@ -11,7 +11,7 @@ If it is down, dm [@iamalive](https://hackclub.slack.com/team/U0828FYS2UC) on sl
 ## Usable Commands
 
 /bdaypheus
-    Model to invite people from a user group/channel to another channel for birthday planning
+    Model to invite people from a user group/channel to a birthday planning channel. The bot can create a new private channel for you, or you can pick one you already made
 
 /link-bdaypheus
     Used to link your slack account to add people from private channels(check the part below for why this is)
@@ -19,8 +19,11 @@ If it is down, dm [@iamalive](https://hackclub.slack.com/team/U0828FYS2UC) on sl
 /unlink-bdaypheus
     Used to unlink your slack account and get rid of your personal token(check [warning.md](docs/warning.md) fur full explanation)
 
+/send-reminders 
+    DMs everyone who hasn't accepted or declined yet a nudge with a link to their original invite!
+
 /send-reminders [@birthday person]
-    Re-sends the invite to everyone who hasn't accepted or declined yet. (only the original inviter can do this)
+    Same thing, for a specific birthday person's invites (use this if you have more than one going)!
 
 ## Private channels
 

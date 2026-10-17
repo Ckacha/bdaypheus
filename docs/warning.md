@@ -6,6 +6,7 @@ personal Slack access token tied to your account.
 ## What it can do
 
 - Read the name, topic, and full member list of every channel you are in.
+- Create a private planning channel as you when you pick "Create a new private channel" in /bdaypheus (so you are its channel manager), then add the bot to it.
 
 ## What it can't do
 

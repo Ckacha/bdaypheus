@@ -55,7 +55,8 @@
       ],
       "user": [
         "groups:read",
-        "channels:read"
+        "channels:read",
+        "groups:write"
       ]
     }
   },

@@ -36,7 +36,6 @@ function getActive(birthdayUserId) {
   return record;
 }
 
-// keeps earlier invites if the same inviter sends more
 function set(birthdayUserId, { date, inviterId, destChannelId, message }) {
   const existing = birthdays[birthdayUserId];
   const invites = existing && existing.inviterId === inviterId ? existing.invites || {} : {};
@@ -44,12 +43,18 @@ function set(birthdayUserId, { date, inviterId, destChannelId, message }) {
   save();
 }
 
-function addInvites(birthdayUserId, userIds) {
+function statusOf(invite) {
+  return typeof invite === 'string' ? invite : invite && invite.status;
+}
+
+function addInvites(birthdayUserId, sent) {
   const record = birthdays[birthdayUserId];
   if (!record) return;
   record.invites = record.invites || {};
-  for (const userId of userIds) {
-    if (!record.invites[userId]) record.invites[userId] = 'pending';
+  for (const { userId, channel, ts } of sent) {
+    if (!record.invites[userId] || statusOf(record.invites[userId]) === 'pending') {
+      record.invites[userId] = { status: 'pending', channel, ts };
+    }
   }
   save();
 }
@@ -57,7 +62,8 @@ function addInvites(birthdayUserId, userIds) {
 function markResponse(birthdayUserId, userId, status) {
   const record = birthdays[birthdayUserId];
   if (!record || !record.invites || !record.invites[userId]) return;
-  record.invites[userId] = status;
+  const invite = record.invites[userId];
+  record.invites[userId] = typeof invite === 'string' ? { status } : { ...invite, status };
   save();
 }
 
@@ -68,4 +74,4 @@ function getActiveByInviter(inviterId) {
     .filter((entry) => entry.record);
 }
 
-module.exports = { getActive, getActiveByInviter, set, addInvites, markResponse, todayString };
+module.exports = { getActive, getActiveByInviter, set, addInvites, markResponse, statusOf, todayString };
