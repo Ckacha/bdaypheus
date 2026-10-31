@@ -394,15 +394,28 @@ async function getChannelMembers(client, channelId) {
   return members;
 }
 
+// userId -> Promise<boolean>. Whether someone is a bot never changes, so each user is
+// looked up once per process instead of on every modal refresh (users.info is rate limited).
+const isBotCache = new Map([['USLACKBOT', Promise.resolve(true)]]);
+
+function isBotUser(client, userId) {
+  if (!isBotCache.has(userId)) {
+    const lookup = client.users
+      .info({ user: userId })
+      .then((resp) => Boolean(resp.user && resp.user.is_bot))
+      .catch(() => {
+        isBotCache.delete(userId);
+        return false;
+      });
+    isBotCache.set(userId, lookup);
+  }
+  return isBotCache.get(userId);
+}
+
 async function getBotUserIds(client, userIds) {
   const botIds = new Set(['USLACKBOT']);
   for (const userId of userIds) {
-    if (botIds.has(userId)) continue;
-    try {
-      const resp = await client.users.info({ user: userId });
-      if (resp.user && resp.user.is_bot) botIds.add(userId);
-    } catch (err) {
-    }
+    if (await isBotUser(client, userId)) botIds.add(userId);
   }
   return botIds;
 }
@@ -1548,7 +1561,31 @@ app.action('view_readme', async ({ ack }) => {
   await ack();
 });
 
-app.view('bday_confirm', async ({ ack, view, client, body }) => {
+// birthdayUserIds with a send in progress, so re-submitting while the first one is
+// still working doesn't DM everyone again.
+const sendsInFlight = new Set();
+
+app.view('bday_confirm', async (args) => {
+  const { birthdayUserId } = readFormState(args.view.state.values);
+  if (sendsInFlight.has(birthdayUserId)) {
+    await args.ack();
+    await args.client.chat.postMessage({
+      channel: args.body.user.id,
+      text:
+        `I'm still sending the invites for <@${birthdayUserId}>'s birthday from before! ` +
+        "No need to send again, I'll DM you when it's done.",
+    });
+    return;
+  }
+  sendsInFlight.add(birthdayUserId);
+  try {
+    await handleBdayConfirm(args);
+  } finally {
+    sendsInFlight.delete(birthdayUserId);
+  }
+});
+
+async function handleBdayConfirm({ ack, view, client, body }) {
   const inviterId = body.user.id;
   const { sourceChannelId, birthdayUserId, birthdayDate, destMode, channelName, groupIds, recipientIds, messageInput } =
     readFormState(view.state.values);
@@ -1659,6 +1696,13 @@ app.view('bday_confirm', async ({ ack, view, client, body }) => {
 
   await ack();
 
+  await client.chat.postMessage({
+    channel: inviterId,
+    text:
+      `On it! Sending invites for <@${birthdayUserId}>'s birthday now. Big channels can take a few ` +
+      "minutes, I'll DM you when it's done. No need to send again!",
+  });
+
   let toMessage = recipientIds.filter((id) => id !== birthdayUserId);
   if (!recipientIds.length) {
     try {
@@ -1684,6 +1728,18 @@ app.view('bday_confirm', async ({ ack, view, client, body }) => {
     await client.chat.postMessage({
       channel: inviterId,
       text: "There's nobody in the invite list! Add someone in the \"People to invite\" field and try again.",
+    });
+    return;
+  }
+
+  const alreadyInvited = existing && existing.inviterId === inviterId ? existing.invites || {} : {};
+  toMessage = toMessage.filter((id) => !alreadyInvited[id]);
+  if (!toMessage.length) {
+    await client.chat.postMessage({
+      channel: inviterId,
+      text:
+        `Everyone on that list already got an invite for <@${birthdayUserId}>'s birthday, so I didn't send ` +
+        'any more. Use /send-reminders to nudge people who haven\'t answered.',
     });
     return;
   }
@@ -1724,7 +1780,7 @@ app.view('bday_confirm', async ({ ack, view, client, body }) => {
     channel: inviterId,
     text: summaryLines.join('\n'),
   });
-});
+}
 
 app.action('bday_accept', async ({ ack, body, client, action }) => {
   await ack();
